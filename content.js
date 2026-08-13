@@ -62,6 +62,9 @@ async function handleStart() {
             nextPage,
         },
     });
+    if (nextPage) {
+        waitForPageChange(currentPage);
+    }
 }
 
 function resolveAction(element) {
@@ -276,4 +279,34 @@ function sendNextPageTarget(nextButton, currentPage) {
         type: 'NEXT_PAGE_FOUND',
         payload: target,
     });
+}
+
+function waitForPageChange(previousPage) {
+    const observer = new MutationObserver(() => {
+        const currentPage = getCurrentPageNumber();
+
+        if (
+            currentPage &&
+            currentPage !== previousPage
+        ) {
+            console.log('[LCA] PAGE CHANGED:', {
+                from: previousPage,
+                to: currentPage,
+            });
+
+            observer.disconnect();
+
+            handleStart();
+        }
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+    });
+
+    console.log(
+        '[LCA] WAITING FOR PAGE CHANGE FROM:',
+        previousPage
+    );
 }

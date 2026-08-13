@@ -15,39 +15,31 @@ const DEFAULT_STATE = {
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('[LCA] MESSAGE RECEIVED:', {
+        type: message.type,
+        senderUrl: sender.url,
+        tabId: sender.tab?.id ?? null,
+    });
+
     if (message.type === 'START_AUTOMATION') {
         startAutomation(message.tabId);
+        return;
     }
 
     if (message.type === 'STOP_AUTOMATION') {
+        console.warn('[LCA] STOP REQUEST RECEIVED:', {
+            senderUrl: sender.url,
+            tabId: sender.tab?.id ?? null,
+            time: new Date().toISOString(),
+        });
+
         stopAutomation();
+        return;
     }
 
     if (message.type === 'GET_STATE') {
         getState().then(sendResponse);
-
         return true;
-    }
-
-    if (message.type === 'TARGETS_FOUND') {
-        const tabId = sender.tab?.id;
-
-        if (!tabId) {
-            console.error('[LCA] Sender tab id not found');
-            return;
-        }
-
-        handleTargets(tabId, message.payload);
-    }
-    if (message.type === 'NEXT_PAGE_FOUND') {
-        const tabId = sender.tab?.id;
-
-        if (!tabId) {
-            console.error('[LCA] Next page sender tab not found');
-            return;
-        }
-
-        handleNextPageTarget(tabId, message.payload);
     }
 
     if (message.type === 'PAGE_DATA') {
@@ -124,40 +116,6 @@ async function stopAutomation() {
     console.log('[LCA] Automation stopped');
 }
 
-async function handleTargets(tabId, targets) {
-    const state = await getState();
-
-    if (state.status !== 'running') {
-        console.log('[LCA] Automation is not running');
-        return;
-    }
-
-    if (!Array.isArray(targets)) {
-        console.error('[LCA] Invalid targets payload');
-        return;
-    }
-
-    const nextState = {
-        ...state,
-        tabId,
-        targets,
-
-        currentIndex:
-            state.targets.length > 0
-                ? state.currentIndex
-                : 0,
-    };
-
-    await setState(nextState);
-
-    console.log('[LCA] TARGETS STORED:', targets.length);
-
-    if (targets.length > 0) {
-        console.log('[LCA] FIRST TARGET:', targets[0]);
-    }
-
-    await processNextTarget();
-}
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -239,34 +197,16 @@ async function applyTargetResult(result) {
     await setState(nextState);
 }
 
-async function handleNextPageTarget(tabId, target) {
-    console.log('[LCA] NEXT PAGE MESSAGE RECEIVED:', {
-        tabId,
-        target,
-    });
 
-    const state = await getState();
-
-    if (state.status !== 'running') {
-        console.log(
-            '[LCA] NEXT PAGE SKIPPED: automation is not running'
-        );
-        return;
-    }
-
-    await setState({
-        ...state,
-        nextPage: target,
-    });
-
-    console.log('[LCA] NEXT PAGE STORED:', target);
-}
 
 async function handlePageData(tabId, pageData) {
     const state = await getState();
 
-    if (state.status !== 'running') {
-        console.log('[LCA] Automation is not running');
+    if (
+        state.status !== 'running' &&
+        state.status !== 'waiting_next_page'
+    ) {
+        console.log('[LCA] Automation is not active');
         return;
     }
 
@@ -279,6 +219,7 @@ async function handlePageData(tabId, pageData) {
     const nextState = {
         ...state,
 
+        status: 'running',
         tabId,
 
         targets,

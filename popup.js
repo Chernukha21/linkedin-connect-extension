@@ -34,7 +34,26 @@ async function renderState() {
         type: 'GET_STATE',
     });
 
+    if (!state) {
+        return;
+    }
+
     statusElement.textContent = state.status;
 }
+
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') {
+        return;
+    }
+
+    const change = changes.automationState;
+
+    if (!change?.newValue) {
+        return;
+    }
+
+    statusElement.textContent = change.newValue.status;
+});
 
 renderState();
