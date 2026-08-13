@@ -6,11 +6,13 @@ const DEFAULT_STATE = {
     targets: [],
     currentIndex: 0,
 
+    currentPage: 1,
+    nextPage: null,
+
     sent: 0,
     skipped: 0,
     failed: 0,
 };
-
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'START_AUTOMATION') {
@@ -36,6 +38,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         handleTargets(tabId, message.payload);
+    }
+    if (message.type === 'NEXT_PAGE_FOUND') {
+        const tabId = sender.tab?.id;
+
+        if (!tabId) {
+            console.error('[LCA] Next page sender tab not found');
+            return;
+        }
+
+        handleNextPageTarget(tabId, message.payload);
+    }
+
+    if (message.type === 'PAGE_DATA') {
+        const tabId = sender.tab?.id;
+
+        if (!tabId) {
+            console.error('[LCA] Page sender tab not found');
+            return;
+        }
+
+        handlePageData(tabId, message.payload);
     }
 });
 
@@ -151,7 +174,20 @@ async function processNextTarget() {
     const target = state.targets[state.currentIndex];
 
     if (!target) {
-        console.log('[LCA] No more targets');
+        console.log('[LCA] No more targets on current page');
+
+        if (state.nextPage) {
+            console.log('[LCA] NEXT PAGE AVAILABLE:', state.nextPage);
+
+            await setState({
+                ...state,
+                status: 'waiting_next_page',
+            });
+
+            return;
+        }
+
+        console.log('[LCA] No next page. Run finished.');
 
         await setState({
             ...state,
@@ -175,7 +211,7 @@ async function processNextTarget() {
         result,
     });
 
-    await sleep(5000);
+    await sleep(1200);
 
     await processNextTarget();
 }
@@ -201,4 +237,64 @@ async function applyTargetResult(result) {
     }
 
     await setState(nextState);
+}
+
+async function handleNextPageTarget(tabId, target) {
+    console.log('[LCA] NEXT PAGE MESSAGE RECEIVED:', {
+        tabId,
+        target,
+    });
+
+    const state = await getState();
+
+    if (state.status !== 'running') {
+        console.log(
+            '[LCA] NEXT PAGE SKIPPED: automation is not running'
+        );
+        return;
+    }
+
+    await setState({
+        ...state,
+        nextPage: target,
+    });
+
+    console.log('[LCA] NEXT PAGE STORED:', target);
+}
+
+async function handlePageData(tabId, pageData) {
+    const state = await getState();
+
+    if (state.status !== 'running') {
+        console.log('[LCA] Automation is not running');
+        return;
+    }
+
+    const {
+        targets,
+        currentPage,
+        nextPage,
+    } = pageData;
+
+    const nextState = {
+        ...state,
+
+        tabId,
+
+        targets,
+        currentIndex: 0,
+
+        currentPage,
+        nextPage,
+    };
+
+    await setState(nextState);
+
+    console.log('[LCA] PAGE STORED:', {
+        currentPage,
+        targets: targets.length,
+        hasNext: Boolean(nextPage),
+    });
+
+    await processNextTarget();
 }
