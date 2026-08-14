@@ -1,0 +1,17 @@
+{
+  "name": "linkedin-connect-extension",
+  "version": "1.0.0",
+  "description": "Calling a DOM element directly:",
+  "main": "src/content/content.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/chrome": "^0.2.6",
+    "prettier": "^3.9.6"
+  }
+}

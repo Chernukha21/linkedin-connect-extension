@@ -2,21 +2,18 @@
   "manifest_version": 3,
   "name": "LinkedIn Connect Automation",
   "version": "0.1.0",
-  "permissions": [
-    "activeTab",
-    "debugger",
-    "storage"
-  ],
+  "permissions": ["activeTab", "debugger", "storage"],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "src/popup/popup.html"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["src/content/content.js"]
     }
   ],
   "background": {
-    "service_worker": "service-worker.js"
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
   }
 }
