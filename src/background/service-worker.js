@@ -1,6 +1,13 @@
 import { getState } from './state.js';
 import { startAutomation, stopAutomation } from './automation.js';
 import { handlePageData } from './page.js';
+import { handleModalState } from './queue.js';
+
+// Temporary manual test hook.
+// Remove before the final submission.
+globalThis.LCA_TEST = {
+  handleModalState,
+};
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[LCA] MESSAGE RECEIVED:', {
@@ -10,7 +17,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   });
 
   if (message.type === 'START_AUTOMATION') {
-    startAutomation(message.tabId);
+    startAutomation(message.tabId).catch((error) => {
+      console.error('[LCA] START AUTOMATION FAILED:', error);
+    });
+
     return;
   }
 
@@ -21,12 +31,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       time: new Date().toISOString(),
     });
 
-    stopAutomation();
+    stopAutomation().catch((error) => {
+      console.error('[LCA] STOP AUTOMATION FAILED:', error);
+    });
+
     return;
   }
 
   if (message.type === 'GET_STATE') {
-    getState().then(sendResponse);
+    getState()
+      .then(sendResponse)
+      .catch((error) => {
+        console.error('[LCA] GET STATE FAILED:', error);
+        sendResponse(null);
+      });
 
     return true;
   }
@@ -39,6 +57,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
-    handlePageData(tabId, message.payload);
+    handlePageData(tabId, message.payload).catch((error) => {
+      console.error('[LCA] HANDLE PAGE DATA FAILED:', error);
+    });
   }
 });

@@ -12,7 +12,6 @@ LCA.getOpenShadowRoots = function getOpenShadowRoots(root = document) {
       }
 
       roots.push(element.shadowRoot);
-
       visit(element.shadowRoot);
     }
   };
@@ -26,15 +25,34 @@ LCA.getSearchRoots = function getSearchRoots() {
   return [document, ...LCA.getOpenShadowRoots()];
 };
 
+LCA.getElementCenter = function getElementCenter(element) {
+  const rect = element.getBoundingClientRect();
+
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+};
+
+LCA.getVisibleButtons = function getVisibleButtons(root) {
+  return [...root.querySelectorAll('button, [role="button"]')].filter(
+    (button) => {
+      const rect = button.getBoundingClientRect();
+
+      return rect.width > 0 && rect.height > 0;
+    }
+  );
+};
+
 LCA.resolveModalState = function resolveModalState() {
   const roots = LCA.getSearchRoots();
 
+  // Add note modal
   for (const root of roots) {
-    const buttons = [...root.querySelectorAll('button, [role="button"]')];
+    const buttons = LCA.getVisibleButtons(root);
 
     const sendWithoutNoteButton = buttons.find((button) => {
       const text = button.textContent?.trim() ?? '';
-
       const ariaLabel = button.getAttribute('aria-label')?.trim() ?? '';
 
       return (
@@ -43,19 +61,14 @@ LCA.resolveModalState = function resolveModalState() {
     });
 
     if (sendWithoutNoteButton) {
-      const rect = sendWithoutNoteButton.getBoundingClientRect();
-
       return {
         type: 'ADD_NOTE',
-
-        action: {
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-        },
+        action: LCA.getElementCenter(sendWithoutNoteButton),
       };
     }
   }
 
+  // Weekly invitation limit
   for (const root of roots) {
     const text = root.textContent?.trim() ?? '';
 
@@ -64,10 +77,50 @@ LCA.resolveModalState = function resolveModalState() {
         type: 'WEEKLY_LIMIT',
       };
     }
+  }
 
-    if (text.includes('How do you know')) {
+  // Email / relationship verification
+  for (const root of roots) {
+    const text = root.textContent?.trim() ?? '';
+
+    if (!text.includes('How do you know')) {
+      continue;
+    }
+
+    const buttons = LCA.getVisibleButtons(root);
+
+    const closeButton = buttons.find((button) => {
+      const text = button.textContent?.trim().toLowerCase() ?? '';
+      const ariaLabel =
+        button.getAttribute('aria-label')?.trim().toLowerCase() ?? '';
+
+      const value = `${ariaLabel} ${text}`;
+
+      return (
+        value.includes('dismiss') ||
+        value.includes('close') ||
+        value.includes('cancel') ||
+        value.includes('not now')
+      );
+    });
+
+    return {
+      type: 'EMAIL_VERIFICATION',
+      action: closeButton ? LCA.getElementCenter(closeButton) : null,
+    };
+  }
+
+  const interopRoot =
+    document.querySelector('#interop-outlet')?.shadowRoot ?? null;
+
+  if (interopRoot) {
+    const text = interopRoot.textContent?.trim() ?? '';
+
+    if (text) {
       return {
-        type: 'EMAIL_VERIFICATION',
+        type: 'UNKNOWN',
+        text,
+        dom: interopRoot.innerHTML,
       };
     }
   }

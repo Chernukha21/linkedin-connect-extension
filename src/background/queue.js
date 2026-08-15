@@ -2,6 +2,10 @@ import { getState, setState } from './state.js';
 import { trustedClick } from './input.js';
 import { sleep } from './utils.js';
 
+// Safety switch while modal branches are being tested.
+// With false, Start will NEVER click a real Connect button.
+const LIVE_CONNECT_ENABLED = false;
+
 async function waitForModalState(tabId, timeout = 5000) {
   const startedAt = Date.now();
 
@@ -40,6 +44,111 @@ async function waitForModalToClose(tabId, timeout = 5000) {
   return false;
 }
 
+export async function handleModalState(state, target, modalState) {
+  switch (modalState.type) {
+    case 'ADD_NOTE': {
+      if (!modalState.action) {
+        console.error('[LCA] ADD NOTE ACTION NOT FOUND');
+        return null;
+      }
+
+      await trustedClick(state.tabId, modalState.action.x, modalState.action.y);
+
+      console.log('[LCA] SEND WITHOUT NOTE CLICK DISPATCHED:', {
+        name: target.name,
+      });
+
+      const modalClosed = await waitForModalToClose(state.tabId);
+
+      if (!modalClosed) {
+        console.error('[LCA] ADD NOTE MODAL DID NOT CLOSE');
+        return null;
+      }
+
+      await applyTargetResult('sent');
+
+      console.log('[LCA] RESULT:', {
+        name: target.name,
+        result: 'sent',
+      });
+
+      return 'sent';
+    }
+
+    case 'EMAIL_VERIFICATION': {
+      console.log('[LCA] EMAIL VERIFICATION:', {
+        name: target.name,
+      });
+
+      if (!modalState.action) {
+        console.error('[LCA] EMAIL VERIFICATION CLOSE ACTION NOT FOUND');
+
+        return null;
+      }
+
+      await trustedClick(state.tabId, modalState.action.x, modalState.action.y);
+
+      console.log('[LCA] EMAIL VERIFICATION CLOSE CLICK DISPATCHED:', {
+        name: target.name,
+      });
+
+      const modalClosed = await waitForModalToClose(state.tabId);
+
+      if (!modalClosed) {
+        console.error('[LCA] EMAIL VERIFICATION MODAL DID NOT CLOSE');
+
+        return null;
+      }
+
+      await applyTargetResult('skipped');
+
+      console.log('[LCA] RESULT:', {
+        name: target.name,
+        result: 'skipped',
+        reason: 'email_verification',
+      });
+
+      return 'skipped';
+    }
+    case 'WEEKLY_LIMIT': {
+      console.warn('[LCA] WEEKLY INVITATION LIMIT REACHED');
+
+      const latestState = await getState();
+
+      await setState({
+        ...latestState,
+        status: 'stopped',
+      });
+
+      console.log('[LCA] AUTOMATION STOPPED: weekly invitation limit');
+
+      return 'stopped';
+    }
+    case 'UNKNOWN': {
+      console.error('[LCA] UNKNOWN MODAL DETECTED:', {
+        name: target.name,
+        text: modalState.text,
+        dom: modalState.dom,
+      });
+
+      const latestState = await getState();
+
+      await setState({
+        ...latestState,
+        status: 'stopped',
+      });
+
+      console.error('[LCA] AUTOMATION STOPPED: unknown modal');
+
+      return 'stopped';
+    }
+    default: {
+      console.error('[LCA] UNHANDLED MODAL STATE:', modalState);
+      return null;
+    }
+  }
+}
+
 export async function processNextTarget() {
   const state = await getState();
 
@@ -50,7 +159,6 @@ export async function processNextTarget() {
 
   const target = state.targets[state.currentIndex];
 
-  // Targets on the current page are exhausted.
   if (!target) {
     console.log('[LCA] No more targets on current page');
 
@@ -80,8 +188,8 @@ export async function processNextTarget() {
     name: target.name,
   });
 
-  // Get fresh viewport coordinates because coordinates collected
-  // during the initial scroll may already be stale.
+  // Coordinates from the collection pass can be stale after scrolling,
+  // so resolve them again immediately before the click.
   const position = await chrome.tabs.sendMessage(state.tabId, {
     type: 'RESOLVE_TARGET_POSITION',
     target,
@@ -92,6 +200,11 @@ export async function processNextTarget() {
       name: target.name,
     });
 
+    await setState({
+      ...state,
+      status: 'stopped',
+    });
+
     return;
   }
 
@@ -100,52 +213,39 @@ export async function processNextTarget() {
     ...position,
   });
 
-  // Trusted click on the Connect button.
+  // Temporary protection against accidental real invitations
+  // while the remaining modal states are being tested.
+  if (!LIVE_CONNECT_ENABLED) {
+    console.warn(
+      '[LCA] LIVE CONNECT DISABLED - real Connect click was not performed'
+    );
+
+    await setState({
+      ...state,
+      status: 'stopped',
+    });
+
+    return;
+  }
+
   await trustedClick(state.tabId, position.x, position.y);
 
   console.log('[LCA] CONNECT CLICK DISPATCHED:', {
     name: target.name,
   });
 
-  // Wait for LinkedIn to open a modal.
   const modalState = await waitForModalState(state.tabId);
 
   console.log('[LCA] MODAL STATE:', modalState);
 
-  // For now we test only the happy path:
-  // Connect -> Add a note -> Send without a note.
-  if (modalState.type !== 'ADD_NOTE') {
-    console.error('[LCA] EXPECTED ADD_NOTE MODAL:', modalState);
+  const result = await handleModalState(state, target, modalState);
 
+  if (!result) {
     return;
   }
 
-  // Trusted click on "Send without a note".
-  await trustedClick(state.tabId, modalState.action.x, modalState.action.y);
-
-  console.log('[LCA] SEND WITHOUT NOTE CLICK DISPATCHED:', {
-    name: target.name,
-  });
-
-  // Do not count the invitation as sent until the modal disappears.
-  const modalClosed = await waitForModalToClose(state.tabId);
-
-  if (!modalClosed) {
-    console.error('[LCA] MODAL DID NOT CLOSE');
-
-    return;
-  }
-
-  await applyTargetResult('sent');
-
-  console.log('[LCA] RESULT:', {
-    name: target.name,
-    result: 'sent',
-  });
-
-  // IMPORTANT:
-  // This is intentionally a single-target test.
-  // We stop after one successful invitation.
+  // Temporary single-target stop.
+  // We will remove this when all modal branches are ready.
   const latestState = await getState();
 
   await setState({
