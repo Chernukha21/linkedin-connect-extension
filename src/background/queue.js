@@ -1,5 +1,44 @@
 import { getState, setState } from './state.js';
+import { trustedClick } from './input.js';
 import { sleep } from './utils.js';
+
+async function waitForModalState(tabId, timeout = 5000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeout) {
+    const modalState = await chrome.tabs.sendMessage(tabId, {
+      type: 'GET_MODAL_STATE',
+    });
+
+    if (modalState?.type !== 'NONE') {
+      return modalState;
+    }
+
+    await sleep(200);
+  }
+
+  return {
+    type: 'NONE',
+  };
+}
+
+async function waitForModalToClose(tabId, timeout = 5000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeout) {
+    const modalState = await chrome.tabs.sendMessage(tabId, {
+      type: 'GET_MODAL_STATE',
+    });
+
+    if (modalState?.type === 'NONE') {
+      return true;
+    }
+
+    await sleep(200);
+  }
+
+  return false;
+}
 
 export async function processNextTarget() {
   const state = await getState();
@@ -11,6 +50,7 @@ export async function processNextTarget() {
 
   const target = state.targets[state.currentIndex];
 
+  // Targets on the current page are exhausted.
   if (!target) {
     console.log('[LCA] No more targets on current page');
 
@@ -40,19 +80,80 @@ export async function processNextTarget() {
     name: target.name,
   });
 
-  // Dry-run result for now.
-  const result = 'skipped';
+  // Get fresh viewport coordinates because coordinates collected
+  // during the initial scroll may already be stale.
+  const position = await chrome.tabs.sendMessage(state.tabId, {
+    type: 'RESOLVE_TARGET_POSITION',
+    target,
+  });
 
-  await applyTargetResult(result);
+  if (!position) {
+    console.error('[LCA] FAILED TO RESOLVE TARGET:', {
+      name: target.name,
+    });
+
+    return;
+  }
+
+  console.log('[LCA] CLICK POSITION:', {
+    name: target.name,
+    ...position,
+  });
+
+  // Trusted click on the Connect button.
+  await trustedClick(state.tabId, position.x, position.y);
+
+  console.log('[LCA] CONNECT CLICK DISPATCHED:', {
+    name: target.name,
+  });
+
+  // Wait for LinkedIn to open a modal.
+  const modalState = await waitForModalState(state.tabId);
+
+  console.log('[LCA] MODAL STATE:', modalState);
+
+  // For now we test only the happy path:
+  // Connect -> Add a note -> Send without a note.
+  if (modalState.type !== 'ADD_NOTE') {
+    console.error('[LCA] EXPECTED ADD_NOTE MODAL:', modalState);
+
+    return;
+  }
+
+  // Trusted click on "Send without a note".
+  await trustedClick(state.tabId, modalState.action.x, modalState.action.y);
+
+  console.log('[LCA] SEND WITHOUT NOTE CLICK DISPATCHED:', {
+    name: target.name,
+  });
+
+  // Do not count the invitation as sent until the modal disappears.
+  const modalClosed = await waitForModalToClose(state.tabId);
+
+  if (!modalClosed) {
+    console.error('[LCA] MODAL DID NOT CLOSE');
+
+    return;
+  }
+
+  await applyTargetResult('sent');
 
   console.log('[LCA] RESULT:', {
     name: target.name,
-    result,
+    result: 'sent',
   });
 
-  await sleep(1200);
+  // IMPORTANT:
+  // This is intentionally a single-target test.
+  // We stop after one successful invitation.
+  const latestState = await getState();
 
-  await processNextTarget();
+  await setState({
+    ...latestState,
+    status: 'stopped',
+  });
+
+  console.log('[LCA] SINGLE TARGET TEST COMPLETE');
 }
 
 async function applyTargetResult(result) {

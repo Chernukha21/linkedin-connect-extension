@@ -2,12 +2,33 @@ console.log('[LCA] CONTENT SCRIPT LOADED');
 
 LCA.observeModals();
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type !== 'START') {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'START') {
+    LCA.handleStart();
     return;
   }
 
-  LCA.handleStart();
+  if (message.type === 'RESOLVE_TARGET_POSITION') {
+    LCA.resolveTargetPosition(message.target)
+      .then((position) => {
+        sendResponse(position);
+      })
+      .catch((error) => {
+        console.error('[LCA] FAILED TO RESOLVE TARGET POSITION:', error);
+
+        sendResponse(null);
+      });
+
+    return true;
+  }
+
+  if (message.type === 'GET_MODAL_STATE') {
+    const modalState = LCA.resolveModalState();
+
+    console.log('[LCA] MODAL STATE REQUESTED:', modalState);
+
+    sendResponse(modalState);
+  }
 });
 
 LCA.handleStart = async function handleStart() {

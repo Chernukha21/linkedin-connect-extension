@@ -1,41 +1,79 @@
 globalThis.LCA = globalThis.LCA ?? {};
 
+LCA.getOpenShadowRoots = function getOpenShadowRoots(root = document) {
+  const roots = [];
+
+  const visit = (currentRoot) => {
+    const elements = currentRoot.querySelectorAll('*');
+
+    for (const element of elements) {
+      if (!element.shadowRoot) {
+        continue;
+      }
+
+      roots.push(element.shadowRoot);
+
+      visit(element.shadowRoot);
+    }
+  };
+
+  visit(root);
+
+  return roots;
+};
+
+LCA.getSearchRoots = function getSearchRoots() {
+  return [document, ...LCA.getOpenShadowRoots()];
+};
+
 LCA.resolveModalState = function resolveModalState() {
-  const dialog = document.querySelector('[role="dialog"]');
+  const roots = LCA.getSearchRoots();
 
-  if (!dialog) {
-    return {
-      type: 'NONE',
-    };
+  for (const root of roots) {
+    const buttons = [...root.querySelectorAll('button, [role="button"]')];
+
+    const sendWithoutNoteButton = buttons.find((button) => {
+      const text = button.textContent?.trim() ?? '';
+
+      const ariaLabel = button.getAttribute('aria-label')?.trim() ?? '';
+
+      return (
+        text === 'Send without a note' || ariaLabel === 'Send without a note'
+      );
+    });
+
+    if (sendWithoutNoteButton) {
+      const rect = sendWithoutNoteButton.getBoundingClientRect();
+
+      return {
+        type: 'ADD_NOTE',
+
+        action: {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        },
+      };
+    }
   }
 
-  const text = dialog.textContent?.trim() ?? '';
+  for (const root of roots) {
+    const text = root.textContent?.trim() ?? '';
 
-  const sendWithoutNoteButton = dialog.querySelector(
-    '[aria-label="Send without a note"]'
-  );
+    if (text.includes("You've reached the weekly invitation limit")) {
+      return {
+        type: 'WEEKLY_LIMIT',
+      };
+    }
 
-  if (sendWithoutNoteButton) {
-    return {
-      type: 'ADD_NOTE',
-    };
-  }
-
-  if (text.includes('How do you know')) {
-    return {
-      type: 'EMAIL_VERIFICATION',
-    };
-  }
-
-  if (text.includes("You've reached the weekly invitation limit")) {
-    return {
-      type: 'WEEKLY_LIMIT',
-    };
+    if (text.includes('How do you know')) {
+      return {
+        type: 'EMAIL_VERIFICATION',
+      };
+    }
   }
 
   return {
-    type: 'UNKNOWN',
-    text,
+    type: 'NONE',
   };
 };
 

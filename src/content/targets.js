@@ -92,3 +92,100 @@ LCA.collectTargetsWithScroll = async function collectTargetsWithScroll() {
 
   return [...collected.values()];
 };
+
+LCA.findTargetElement = function findTargetElement(target) {
+  const actionElements = [
+    ...document.querySelectorAll(`
+      a[aria-label],
+      button[aria-label],
+      a[href*="/messaging/compose/"]
+    `),
+  ];
+
+  return (
+    actionElements.find((element) => {
+      const type = LCA.resolveAction(element);
+
+      if (type !== target.type) {
+        return false;
+      }
+
+      const ariaLabel = element.getAttribute('aria-label')?.trim() ?? '';
+      const href = element.getAttribute('href') ?? null;
+
+      if (target.label && ariaLabel === target.label) {
+        return true;
+      }
+
+      if (target.href && href === target.href) {
+        return true;
+      }
+
+      return false;
+    }) ?? null
+  );
+};
+
+LCA.resolveTargetPosition = async function resolveTargetPosition(target) {
+  let element = LCA.findTargetElement(target);
+
+  if (!element) {
+    console.log('[LCA] TARGET NOT CURRENTLY VISIBLE:', {
+      name: target.name,
+      type: target.type,
+    });
+
+    return null;
+  }
+
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  });
+
+  await LCA.sleep(500);
+
+  element = LCA.findTargetElement(target);
+
+  if (!element) {
+    console.log('[LCA] TARGET DISAPPEARED AFTER SCROLL:', {
+      name: target.name,
+      type: target.type,
+    });
+
+    return null;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  if (
+    rect.width <= 0 ||
+    rect.height <= 0 ||
+    rect.bottom < 0 ||
+    rect.top > window.innerHeight
+  ) {
+    console.log('[LCA] TARGET IS OUTSIDE VIEWPORT:', {
+      name: target.name,
+      rect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      },
+    });
+
+    return null;
+  }
+
+  const position = {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+
+  console.log('[LCA] TARGET POSITION RESOLVED:', {
+    name: target.name,
+    ...position,
+  });
+
+  return position;
+};
