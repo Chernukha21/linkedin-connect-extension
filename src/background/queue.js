@@ -10,6 +10,8 @@ import {
 
 import { getInterTargetDelay } from './timing.js';
 
+import { scheduleRecovery, clearRecovery } from './recovery.js';
+
 // Safety switch while the remaining automation flow is being tested.
 // With false, Start will NEVER click a real Connect button.
 const LIVE_CONNECT_ENABLED = false;
@@ -199,15 +201,21 @@ async function continueWithNextTarget() {
     delay,
   });
 
+  await scheduleRecovery('NEXT_TARGET', delay);
+
   await sleep(delay);
 
   const latestState = await getState();
 
   if (latestState.status !== 'running') {
-    console.log('[LCA] Automation stopped during delay');
+    await clearRecovery();
 
+    console.log('[LCA] Automation stopped during delay');
     return;
   }
+
+  // Worker survived the delay, watchdog is no longer needed.
+  await clearRecovery();
 
   await processNextTarget();
 }
@@ -230,6 +238,70 @@ async function waitForOverflowConnectPosition(tabId, timeout = 3000) {
   return null;
 }
 
+async function moveToNextPage(state) {
+  console.log('[LCA] PREPARING NEXT PAGE:', {
+    currentPage: state.currentPage,
+  });
+
+  await setState({
+    ...state,
+    status: 'waiting_next_page',
+  });
+
+  const delay = getInterTargetDelay();
+
+  console.log('[LCA] NEXT PAGE DELAY:', {
+    delay,
+  });
+
+  await scheduleRecovery('NEXT_PAGE', delay);
+
+  await sleep(delay);
+
+  const latestState = await getState();
+
+  if (latestState.status !== 'waiting_next_page') {
+    await clearRecovery();
+
+    console.log('[LCA] NEXT PAGE NAVIGATION CANCELLED:', {
+      status: latestState.status,
+    });
+
+    return;
+  }
+
+  await clearRecovery();
+
+  await resumeNextPage();
+}
+
+export async function resumeNextPage() {
+  const state = await getState();
+
+  if (state.status !== 'waiting_next_page') {
+    console.log('[LCA] NEXT PAGE RESUME CANCELLED:', {
+      status: state.status,
+    });
+
+    return;
+  }
+
+  const position = await chrome.tabs.sendMessage(state.tabId, {
+    type: 'RESOLVE_NEXT_PAGE_POSITION',
+  });
+
+  if (!position) {
+    await stopWithError('NEXT PAGE POSITION NOT FOUND');
+    return;
+  }
+
+  console.log('[LCA] NEXT PAGE CLICK POSITION:', position);
+
+  await trustedClick(state.tabId, position.x, position.y);
+
+  console.log('[LCA] NEXT PAGE CLICK DISPATCHED');
+}
+
 export async function processNextTarget() {
   const state = await getState();
 
@@ -246,11 +318,7 @@ export async function processNextTarget() {
     if (state.nextPage) {
       console.log('[LCA] NEXT PAGE AVAILABLE:', state.nextPage);
 
-      await setState({
-        ...state,
-        status: 'waiting_next_page',
-      });
-
+      await moveToNextPage(state);
       return;
     }
 

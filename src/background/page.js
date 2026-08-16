@@ -11,6 +11,12 @@ export async function handlePageData(tabId, pageData) {
 
   const { targets, currentPage, nextPage } = pageData;
 
+  const isSamePage = state.currentPage === currentPage;
+
+  const currentIndex = isSamePage
+    ? Math.min(state.currentIndex, targets.length)
+    : 0;
+
   const nextState = {
     ...state,
 
@@ -18,7 +24,7 @@ export async function handlePageData(tabId, pageData) {
     tabId,
 
     targets,
-    currentIndex: 0,
+    currentIndex,
 
     currentPage,
     nextPage,
@@ -29,6 +35,8 @@ export async function handlePageData(tabId, pageData) {
   console.log('[LCA] PAGE STORED:', {
     currentPage,
     targets: targets.length,
+    currentIndex,
+    resumed: isSamePage,
     hasNext: Boolean(nextPage),
   });
 

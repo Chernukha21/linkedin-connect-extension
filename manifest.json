@@ -3,7 +3,7 @@
   "name": "LinkedIn Connect Automation",
   "version": "0.1.0",
 
-  "permissions": ["activeTab", "debugger", "storage"],
+  "permissions": ["activeTab", "debugger", "storage", "alarms"],
 
   "action": {
     "default_popup": "src/popup/popup.html"

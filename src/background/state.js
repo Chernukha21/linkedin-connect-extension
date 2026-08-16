@@ -19,6 +19,8 @@ export const DEFAULT_STATE = {
   },
 
   invitationHistory: [],
+
+  pendingAction: null,
 };
 
 export async function getState() {

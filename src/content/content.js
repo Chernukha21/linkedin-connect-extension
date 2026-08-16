@@ -33,6 +33,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse(LCA.resolveOverflowConnectPosition());
     return;
   }
+  if (message.type === 'RESOLVE_NEXT_PAGE_POSITION') {
+    LCA.resolveNextPagePosition()
+      .then(sendResponse)
+      .catch((error) => {
+        console.error('[LCA] FAILED TO RESOLVE NEXT PAGE POSITION:', error);
+
+        sendResponse(null);
+      });
+
+    return true;
+  }
 });
 
 LCA.handleStart = async function handleStart() {
@@ -83,3 +94,14 @@ LCA.handleStart = async function handleStart() {
     LCA.waitForPageChange(currentPage);
   }
 };
+
+chrome.runtime
+  .sendMessage({
+    type: 'CONTENT_READY',
+    payload: {
+      url: window.location.href,
+    },
+  })
+  .catch((error) => {
+    console.log('[LCA] CONTENT_READY FAILED:', error.message);
+  });
