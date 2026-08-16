@@ -189,3 +189,50 @@ LCA.resolveTargetPosition = async function resolveTargetPosition(target) {
 
   return position;
 };
+
+LCA.findOverflowConnectElement = function findOverflowConnectElement() {
+  const candidates = [
+    ...document.querySelectorAll(
+      '[role="menuitem"], [role="menu"] button, [role="menu"] a'
+    ),
+  ];
+
+  return (
+    candidates.find((element) => {
+      const rect = element.getBoundingClientRect();
+
+      if (rect.width <= 0 || rect.height <= 0) {
+        return false;
+      }
+
+      const text = element.textContent?.trim() ?? '';
+      const ariaLabel = element.getAttribute('aria-label')?.trim() ?? '';
+
+      return (
+        text === 'Connect' ||
+        ariaLabel === 'Connect' ||
+        ariaLabel.toLowerCase().includes('connect')
+      );
+    }) ?? null
+  );
+};
+
+LCA.resolveOverflowConnectPosition = function resolveOverflowConnectPosition() {
+  const element = LCA.findOverflowConnectElement();
+
+  if (!element) {
+    console.log('[LCA] OVERFLOW CONNECT NOT FOUND');
+    return null;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  const position = {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+
+  console.log('[LCA] OVERFLOW CONNECT POSITION:', position);
+
+  return position;
+};

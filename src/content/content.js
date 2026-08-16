@@ -29,6 +29,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     sendResponse(modalState);
   }
+  if (message.type === 'RESOLVE_OVERFLOW_CONNECT_POSITION') {
+    sendResponse(LCA.resolveOverflowConnectPosition());
+    return;
+  }
 });
 
 LCA.handleStart = async function handleStart() {

@@ -17,8 +17,19 @@ export async function startAutomation(tabId) {
 
   const nextState = {
     ...state,
+
     status: 'running',
     tabId,
+
+    targets: [],
+    currentIndex: 0,
+
+    currentPage: 1,
+    nextPage: null,
+
+    sent: 0,
+    skipped: 0,
+    failed: 0,
   };
 
   await setState(nextState);

@@ -12,6 +12,13 @@ export const DEFAULT_STATE = {
   sent: 0,
   skipped: 0,
   failed: 0,
+
+  rateLimits: {
+    daily: 20,
+    weekly: 100,
+  },
+
+  invitationHistory: [],
 };
 
 export async function getState() {
@@ -19,7 +26,25 @@ export async function getState() {
 
   console.log('[LCA] STORAGE RESULT:', result);
 
-  return result?.automationState ?? DEFAULT_STATE;
+  const storedState = result?.automationState;
+
+  if (!storedState) {
+    return structuredClone(DEFAULT_STATE);
+  }
+
+  return {
+    ...structuredClone(DEFAULT_STATE),
+    ...storedState,
+
+    rateLimits: {
+      ...DEFAULT_STATE.rateLimits,
+      ...(storedState.rateLimits ?? {}),
+    },
+
+    invitationHistory: Array.isArray(storedState.invitationHistory)
+      ? storedState.invitationHistory
+      : [],
+  };
 }
 
 export async function setState(nextState) {

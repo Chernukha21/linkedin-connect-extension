@@ -34,20 +34,97 @@ LCA.getElementCenter = function getElementCenter(element) {
   };
 };
 
+LCA.isElementVisible = function isElementVisible(element) {
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+
+  return (
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.top < window.innerHeight &&
+    rect.left < window.innerWidth &&
+    style.display !== 'none' &&
+    style.visibility !== 'hidden'
+  );
+};
+
 LCA.getVisibleButtons = function getVisibleButtons(root) {
   return [...root.querySelectorAll('button, [role="button"]')].filter(
-    (button) => {
-      const rect = button.getBoundingClientRect();
-
-      return rect.width > 0 && rect.height > 0;
-    }
+    LCA.isElementVisible
   );
+};
+
+LCA.findUnknownModalCandidate = function findUnknownModalCandidate(root) {
+  if (!root) {
+    return null;
+  }
+
+  const ignoredTags = new Set(['STYLE', 'SCRIPT', 'LINK', 'TEMPLATE']);
+
+  const viewportCenterX = window.innerWidth / 2;
+  const viewportCenterY = window.innerHeight / 2;
+
+  const candidates = [...root.querySelectorAll('*')].filter((element) => {
+    if (ignoredTags.has(element.tagName)) {
+      return false;
+    }
+
+    if (!LCA.isElementVisible(element)) {
+      return false;
+    }
+
+    const text = element.textContent?.trim() ?? '';
+
+    if (!text) {
+      return false;
+    }
+
+    const rect = element.getBoundingClientRect();
+
+    // Ignore small UI widgets such as LinkedIn's messaging bubble.
+    if (rect.width < 300 || rect.height < 120) {
+      return false;
+    }
+
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const horizontalDistance = Math.abs(centerX - viewportCenterX);
+
+    const verticalDistance = Math.abs(centerY - viewportCenterY);
+
+    // Invitation dialogs are expected to appear near
+    // the central part of the viewport.
+    const horizontallyCentered = horizontalDistance < window.innerWidth * 0.3;
+
+    const verticallyCentered = verticalDistance < window.innerHeight * 0.3;
+
+    return horizontallyCentered && verticallyCentered;
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  candidates.sort((a, b) => {
+    const aRect = a.getBoundingClientRect();
+    const bRect = b.getBoundingClientRect();
+
+    const aArea = aRect.width * aRect.height;
+    const bArea = bRect.width * bRect.height;
+
+    return bArea - aArea;
+  });
+
+  return candidates[0];
 };
 
 LCA.resolveModalState = function resolveModalState() {
   const roots = LCA.getSearchRoots();
 
-  // Add note modal
+  // Add note modal.
   for (const root of roots) {
     const buttons = LCA.getVisibleButtons(root);
 
@@ -68,7 +145,7 @@ LCA.resolveModalState = function resolveModalState() {
     }
   }
 
-  // Weekly invitation limit
+  // Weekly invitation limit.
   for (const root of roots) {
     const text = root.textContent?.trim() ?? '';
 
@@ -79,22 +156,23 @@ LCA.resolveModalState = function resolveModalState() {
     }
   }
 
-  // Email / relationship verification
+  // Email / relationship verification.
   for (const root of roots) {
-    const text = root.textContent?.trim() ?? '';
+    const rootText = root.textContent?.trim() ?? '';
 
-    if (!text.includes('How do you know')) {
+    if (!rootText.includes('How do you know')) {
       continue;
     }
 
     const buttons = LCA.getVisibleButtons(root);
 
     const closeButton = buttons.find((button) => {
-      const text = button.textContent?.trim().toLowerCase() ?? '';
+      const buttonText = button.textContent?.trim().toLowerCase() ?? '';
+
       const ariaLabel =
         button.getAttribute('aria-label')?.trim().toLowerCase() ?? '';
 
-      const value = `${ariaLabel} ${text}`;
+      const value = `${ariaLabel} ${buttonText}`;
 
       return (
         value.includes('dismiss') ||
@@ -110,19 +188,22 @@ LCA.resolveModalState = function resolveModalState() {
     };
   }
 
+  // Unknown modal fallback.
+  //
+  // LinkedIn renders invitation UI inside #interop-outlet's shadow root.
+  // Do not use shadowRoot.textContent directly because the outlet may
+  // contain CSS or other non-modal content even when no modal is open.
   const interopRoot =
     document.querySelector('#interop-outlet')?.shadowRoot ?? null;
 
-  if (interopRoot) {
-    const text = interopRoot.textContent?.trim() ?? '';
+  const unknownModal = LCA.findUnknownModalCandidate(interopRoot);
 
-    if (text) {
-      return {
-        type: 'UNKNOWN',
-        text,
-        dom: interopRoot.innerHTML,
-      };
-    }
+  if (unknownModal) {
+    return {
+      type: 'UNKNOWN',
+      text: unknownModal.textContent?.trim() ?? '',
+      dom: unknownModal.outerHTML,
+    };
   }
 
   return {

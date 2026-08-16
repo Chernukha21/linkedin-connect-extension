@@ -1,12 +1,21 @@
 import { getState } from './state.js';
 import { startAutomation, stopAutomation } from './automation.js';
 import { handlePageData } from './page.js';
-import { handleModalState } from './queue.js';
+import { handleModalState, processNextTarget } from './queue.js';
+import { getInterTargetDelay } from './timing.js';
+import {
+  getRateLimitStatus,
+  canSendInvitation,
+  recordInvitation,
+} from './rate-limit.js';
 
-// Temporary manual test hook.
-// Remove before the final submission.
 globalThis.LCA_TEST = {
   handleModalState,
+  processNextTarget,
+  getRateLimitStatus,
+  canSendInvitation,
+  recordInvitation,
+  getInterTargetDelay,
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
