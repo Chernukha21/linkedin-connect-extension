@@ -1,4 +1,4 @@
-import { getState } from './state.js';
+import { getState, setState } from './state.js';
 import { startAutomation, stopAutomation } from './automation.js';
 import { handlePageData } from './page.js';
 import {
@@ -12,7 +12,6 @@ import {
   canSendInvitation,
   recordInvitation,
 } from './rate-limit.js';
-
 import {
   RECOVERY_ALARM,
   scheduleRecovery,
@@ -20,6 +19,7 @@ import {
   getPendingRecovery,
   ensureRecoveryAlarm,
 } from './recovery.js';
+import { addLogEvent, getLogEvents, clearLogEvents } from './log.js';
 
 globalThis.LCA_TEST = {
   handleModalState,
@@ -34,6 +34,7 @@ globalThis.LCA_TEST = {
   ensureRecoveryAlarm,
   startAutomation,
   stopAutomation,
+  addLogEvent,
 };
 
 chrome.runtime.onStartup.addListener(() => {
@@ -175,6 +176,100 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handlePageData(tabId, message.payload).catch((error) => {
       console.error('[LCA] HANDLE PAGE DATA FAILED:', error);
     });
+  }
+  if (message.type === 'GET_UI_STATE') {
+    (async () => {
+      const state = await getState();
+      const events = await getLogEvents();
+
+      sendResponse({
+        state,
+        rateStatus: getRateLimitStatus(state),
+        events,
+      });
+    })().catch((error) => {
+      console.error('[LCA] GET_UI_STATE FAILED:', error);
+
+      sendResponse(null);
+    });
+
+    return true;
+  }
+
+  if (message.type === 'SET_RATE_LIMITS') {
+    (async () => {
+      const daily = Number(message.daily);
+      const weekly = Number(message.weekly);
+
+      if (
+        !Number.isInteger(daily) ||
+        !Number.isInteger(weekly) ||
+        daily <= 0 ||
+        weekly <= 0
+      ) {
+        sendResponse({
+          ok: false,
+          error: 'Limits must be positive integers',
+        });
+
+        return;
+      }
+
+      if (daily > weekly) {
+        sendResponse({
+          ok: false,
+          error: 'Daily limit cannot exceed weekly limit',
+        });
+
+        return;
+      }
+
+      const state = await getState();
+
+      await setState({
+        ...state,
+
+        rateLimits: {
+          daily,
+          weekly,
+        },
+      });
+
+      console.log('[LCA] RATE LIMITS UPDATED:', {
+        daily,
+        weekly,
+      });
+
+      sendResponse({
+        ok: true,
+      });
+    })().catch((error) => {
+      console.error('[LCA] SET_RATE_LIMITS FAILED:', error);
+
+      sendResponse({
+        ok: false,
+        error: 'Cannot save limits',
+      });
+    });
+
+    return true;
+  }
+  if (message.type === 'CLEAR_LOG') {
+    clearLogEvents()
+      .then(() => {
+        sendResponse({
+          ok: true,
+        });
+      })
+      .catch((error) => {
+        console.error('[LCA] CLEAR LOG FAILED:', error);
+
+        sendResponse({
+          ok: false,
+        });
+      });
+
+    return true;
   }
 });
 

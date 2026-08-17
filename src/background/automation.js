@@ -1,11 +1,15 @@
 import { getState, setState } from './state.js';
 import { clearRecovery } from './recovery.js';
+import { addLogEvent } from './log.js';
 
 export async function startAutomation(tabId) {
   console.log('[LCA] RECEIVED TAB ID:', tabId);
 
   if (!tabId) {
     console.error('[LCA] Tab id is missing');
+
+    await addLogEvent('Cannot start automation: tab id is missing', 'error');
+
     return;
   }
 
@@ -18,15 +22,22 @@ export async function startAutomation(tabId) {
 
   const canResume = state.status === 'paused' && state.tabId === tabId;
 
+  // Resume an existing paused run.
   if (canResume) {
     const nextState = {
       ...state,
+
       status: 'running',
       tabId,
       pendingAction: null,
     };
 
     await setState(nextState);
+
+    await addLogEvent(
+      `Automation resumed from page ${nextState.currentPage}, target ${nextState.currentIndex}`,
+      'info'
+    );
 
     console.log('[LCA] Automation resumed:', {
       tabId,
@@ -44,12 +55,14 @@ export async function startAutomation(tabId) {
       });
     } catch (error) {
       console.error('[LCA] Cannot resume content script:', error);
+
+      await addLogEvent('Cannot resume content script', 'error');
     }
 
     return;
   }
 
-  // This is a completely new run.
+  // Start a completely new run.
   await clearRecovery();
 
   const nextState = {
@@ -73,6 +86,8 @@ export async function startAutomation(tabId) {
 
   await setState(nextState);
 
+  await addLogEvent('New automation run started', 'info');
+
   console.log('[LCA] New automation run started:', {
     tabId,
   });
@@ -84,6 +99,8 @@ export async function startAutomation(tabId) {
     });
   } catch (error) {
     console.error('[LCA] Cannot start content script:', error);
+
+    await addLogEvent('Cannot start content script', 'error');
   }
 }
 
@@ -104,8 +121,13 @@ export async function stopAutomation() {
   });
 
   // Cancel a delayed NEXT_TARGET / NEXT_PAGE watchdog.
-  // The cursor and counters remain untouched for Resume.
+  // Cursor, page and counters remain untouched for Resume.
   await clearRecovery();
+
+  await addLogEvent(
+    `Automation paused on page ${state.currentPage}, target ${state.currentIndex}`,
+    'warning'
+  );
 
   console.log('[LCA] Automation paused:', {
     currentPage: state.currentPage,

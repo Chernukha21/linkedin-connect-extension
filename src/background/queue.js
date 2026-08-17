@@ -12,6 +12,8 @@ import { getInterTargetDelay } from './timing.js';
 
 import { scheduleRecovery, clearRecovery } from './recovery.js';
 
+import { addLogEvent } from './log.js';
+
 // Safety switch while the remaining automation flow is being tested.
 // With false, Start will NEVER click a real Connect button.
 const LIVE_CONNECT_ENABLED = false;
@@ -25,6 +27,8 @@ async function stopWithError(message) {
     ...state,
     status: 'stopped',
   });
+
+  await addLogEvent(message, 'error');
 }
 
 async function waitForModalState(tabId, timeout = 5000) {
@@ -70,6 +74,7 @@ export async function handleModalState(state, target, modalState) {
     case 'ADD_NOTE': {
       if (!modalState.action) {
         await stopWithError('ADD NOTE ACTION NOT FOUND');
+
         return null;
       }
 
@@ -90,6 +95,11 @@ export async function handleModalState(state, target, modalState) {
       await applyTargetResult('sent');
 
       const rateStatus = await recordInvitation();
+
+      await addLogEvent(
+        `Invitation sent to ${target.name ?? 'Unknown user'}`,
+        'success'
+      );
 
       console.log('[LCA] INVITATION RECORDED:', {
         dailyCount: rateStatus.dailyCount,
@@ -133,6 +143,11 @@ export async function handleModalState(state, target, modalState) {
 
       await applyTargetResult('skipped');
 
+      await addLogEvent(
+        `Skipped ${target.name ?? 'target'}: verification required`,
+        'warning'
+      );
+
       console.log('[LCA] RESULT:', {
         name: target.name,
         result: 'skipped',
@@ -152,6 +167,8 @@ export async function handleModalState(state, target, modalState) {
         status: 'stopped',
       });
 
+      await addLogEvent('LinkedIn weekly invitation limit reached', 'warning');
+
       console.log('[LCA] AUTOMATION STOPPED: weekly invitation limit');
 
       return 'stopped';
@@ -170,6 +187,11 @@ export async function handleModalState(state, target, modalState) {
         ...latestState,
         status: 'stopped',
       });
+
+      await addLogEvent(
+        `Automation stopped: unknown modal for ${target.name ?? 'target'}`,
+        'error'
+      );
 
       console.error('[LCA] AUTOMATION STOPPED: unknown modal');
 
@@ -211,10 +233,12 @@ async function continueWithNextTarget() {
     await clearRecovery();
 
     console.log('[LCA] Automation stopped during delay');
+
     return;
   }
 
-  // Worker survived the delay, watchdog is no longer needed.
+  // Worker survived the delay,
+  // watchdog is no longer needed.
   await clearRecovery();
 
   await processNextTarget();
@@ -292,6 +316,7 @@ export async function resumeNextPage() {
 
   if (!position) {
     await stopWithError('NEXT PAGE POSITION NOT FOUND');
+
     return;
   }
 
@@ -307,6 +332,7 @@ export async function processNextTarget() {
 
   if (state.status !== 'running') {
     console.log('[LCA] Automation is not running');
+
     return;
   }
 
@@ -319,6 +345,7 @@ export async function processNextTarget() {
       console.log('[LCA] NEXT PAGE AVAILABLE:', state.nextPage);
 
       await moveToNextPage(state);
+
       return;
     }
 
@@ -329,6 +356,8 @@ export async function processNextTarget() {
       status: 'stopped',
     });
 
+    await addLogEvent('Automation run finished', 'info');
+
     return;
   }
 
@@ -338,8 +367,8 @@ export async function processNextTarget() {
     type: target.type,
   });
 
-  // Only CONNECT targets are processed by this flow.
-  // MORE will need its own overflow-menu handling later.
+  // MORE requires opening the overflow menu
+  // before resolving the actual Connect action.
   if (target.type === 'MORE') {
     console.log('[LCA] PROCESSING MORE TARGET:', {
       name: target.name,
@@ -362,6 +391,13 @@ export async function processNextTarget() {
         status: 'stopped',
       });
 
+      await addLogEvent(
+        rateStatus.dailyReached
+          ? 'Local daily invitation limit reached'
+          : 'Local weekly invitation limit reached',
+        'warning'
+      );
+
       console.log('[LCA] AUTOMATION STOPPED: local rate limit');
 
       return;
@@ -376,6 +412,12 @@ export async function processNextTarget() {
       console.log('[LCA] MORE TARGET NOT FOUND');
 
       await applyTargetResult('skipped');
+
+      await addLogEvent(
+        `Skipped ${target.name ?? 'target'}: More action not found`,
+        'warning'
+      );
+
       await continueWithNextTarget();
 
       return;
@@ -391,6 +433,14 @@ export async function processNextTarget() {
       console.log('[LCA] CONNECT NOT FOUND IN OVERFLOW');
 
       await applyTargetResult('skipped');
+
+      await addLogEvent(
+        `Skipped ${
+          target.name ?? 'target'
+        }: Connect not found in overflow menu`,
+        'warning'
+      );
+
       await continueWithNextTarget();
 
       return;
@@ -409,6 +459,11 @@ export async function processNextTarget() {
         ...state,
         status: 'stopped',
       });
+
+      await addLogEvent(
+        `Live Connect disabled: ${target.name ?? 'target'} was not clicked`,
+        'warning'
+      );
 
       return;
     }
@@ -430,6 +485,7 @@ export async function processNextTarget() {
     return;
   }
 
+  // Non-Connect targets are intentionally skipped.
   if (target.type !== 'CONNECT') {
     console.log('[LCA] TARGET SKIPPED:', {
       name: target.name,
@@ -439,12 +495,18 @@ export async function processNextTarget() {
 
     await applyTargetResult('skipped');
 
+    await addLogEvent(
+      `Skipped ${target.name ?? target.type}: ${target.type}`,
+      'info'
+    );
+
     await continueWithNextTarget();
+
     return;
   }
 
-  // Check persistent local limits before any interaction
-  // with the LinkedIn page.
+  // Check persistent local limits before any
+  // interaction with the LinkedIn page.
   const rateStatus = getRateLimitStatus(state);
 
   console.log('[LCA] RATE LIMIT STATUS:', rateStatus);
@@ -462,14 +524,21 @@ export async function processNextTarget() {
       status: 'stopped',
     });
 
+    await addLogEvent(
+      rateStatus.dailyReached
+        ? 'Local daily invitation limit reached'
+        : 'Local weekly invitation limit reached',
+      'warning'
+    );
+
     console.log('[LCA] AUTOMATION STOPPED: local rate limit');
 
     return;
   }
 
-  // Coordinates collected during the initial scan can
-  // become stale after scrolling, so resolve them again
-  // immediately before the click.
+  // Coordinates collected during the initial scan
+  // can become stale after scrolling, so resolve
+  // them again immediately before the click.
   const position = await chrome.tabs.sendMessage(state.tabId, {
     type: 'RESOLVE_TARGET_POSITION',
     target,
@@ -488,7 +557,8 @@ export async function processNextTarget() {
     ...position,
   });
 
-  // Temporary protection while we test the remaining flow.
+  // Temporary protection while the remaining
+  // flow is being tested.
   if (!LIVE_CONNECT_ENABLED) {
     console.warn(
       '[LCA] LIVE CONNECT DISABLED - real Connect click was not performed'
@@ -498,6 +568,11 @@ export async function processNextTarget() {
       ...state,
       status: 'stopped',
     });
+
+    await addLogEvent(
+      `Live Connect disabled: ${target.name ?? 'target'} was not clicked`,
+      'warning'
+    );
 
     return;
   }
@@ -520,6 +595,7 @@ export async function processNextTarget() {
 
   if (result === 'sent' || result === 'skipped') {
     await continueWithNextTarget();
+
     return;
   }
 
@@ -533,6 +609,7 @@ async function applyTargetResult(result) {
 
   const nextState = {
     ...state,
+
     currentIndex: state.currentIndex + 1,
   };
 
