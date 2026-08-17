@@ -23,7 +23,7 @@ LCA.resolveAction = function resolveAction(element) {
     return 'FOLLOW';
   }
 
-  if (ariaLabel === 'More') {
+  if (ariaLabel === 'More' || ariaLabel.startsWith('More actions')) {
     return 'MORE';
   }
 

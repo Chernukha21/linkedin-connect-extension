@@ -12,6 +12,7 @@ LCA.getOpenShadowRoots = function getOpenShadowRoots(root = document) {
       }
 
       roots.push(element.shadowRoot);
+
       visit(element.shadowRoot);
     }
   };
@@ -30,12 +31,14 @@ LCA.getElementCenter = function getElementCenter(element) {
 
   return {
     x: rect.left + rect.width / 2,
+
     y: rect.top + rect.height / 2,
   };
 };
 
 LCA.isElementVisible = function isElementVisible(element) {
   const rect = element.getBoundingClientRect();
+
   const style = window.getComputedStyle(element);
 
   return (
@@ -64,6 +67,7 @@ LCA.findUnknownModalCandidate = function findUnknownModalCandidate(root) {
   const ignoredTags = new Set(['STYLE', 'SCRIPT', 'LINK', 'TEMPLATE']);
 
   const viewportCenterX = window.innerWidth / 2;
+
   const viewportCenterY = window.innerHeight / 2;
 
   const candidates = [...root.querySelectorAll('*')].filter((element) => {
@@ -83,20 +87,20 @@ LCA.findUnknownModalCandidate = function findUnknownModalCandidate(root) {
 
     const rect = element.getBoundingClientRect();
 
-    // Ignore small UI widgets such as LinkedIn's messaging bubble.
+    // Ignore small unrelated UI such as
+    // LinkedIn's messaging bubble.
     if (rect.width < 300 || rect.height < 120) {
       return false;
     }
 
     const centerX = rect.left + rect.width / 2;
+
     const centerY = rect.top + rect.height / 2;
 
     const horizontalDistance = Math.abs(centerX - viewportCenterX);
 
     const verticalDistance = Math.abs(centerY - viewportCenterY);
 
-    // Invitation dialogs are expected to appear near
-    // the central part of the viewport.
     const horizontallyCentered = horizontalDistance < window.innerWidth * 0.3;
 
     const verticallyCentered = verticalDistance < window.innerHeight * 0.3;
@@ -110,9 +114,11 @@ LCA.findUnknownModalCandidate = function findUnknownModalCandidate(root) {
 
   candidates.sort((a, b) => {
     const aRect = a.getBoundingClientRect();
+
     const bRect = b.getBoundingClientRect();
 
     const aArea = aRect.width * aRect.height;
+
     const bArea = bRect.width * bRect.height;
 
     return bArea - aArea;
@@ -124,12 +130,14 @@ LCA.findUnknownModalCandidate = function findUnknownModalCandidate(root) {
 LCA.resolveModalState = function resolveModalState() {
   const roots = LCA.getSearchRoots();
 
-  // Add note modal.
+  // Standard invitation modal:
+  // "Send without a note".
   for (const root of roots) {
     const buttons = LCA.getVisibleButtons(root);
 
-    const sendWithoutNoteButton = buttons.find((button) => {
+    const action = buttons.find((button) => {
       const text = button.textContent?.trim() ?? '';
+
       const ariaLabel = button.getAttribute('aria-label')?.trim() ?? '';
 
       return (
@@ -137,15 +145,16 @@ LCA.resolveModalState = function resolveModalState() {
       );
     });
 
-    if (sendWithoutNoteButton) {
+    if (action) {
       return {
         type: 'ADD_NOTE',
-        action: LCA.getElementCenter(sendWithoutNoteButton),
+
+        action: LCA.getElementCenter(action),
       };
     }
   }
 
-  // Weekly invitation limit.
+  // LinkedIn-side weekly limit.
   for (const root of roots) {
     const text = root.textContent?.trim() ?? '';
 
@@ -156,7 +165,8 @@ LCA.resolveModalState = function resolveModalState() {
     }
   }
 
-  // Email / relationship verification.
+  // LinkedIn may require additional
+  // relationship / email verification.
   for (const root of roots) {
     const rootText = root.textContent?.trim() ?? '';
 
@@ -184,15 +194,17 @@ LCA.resolveModalState = function resolveModalState() {
 
     return {
       type: 'EMAIL_VERIFICATION',
+
       action: closeButton ? LCA.getElementCenter(closeButton) : null,
     };
   }
 
   // Unknown modal fallback.
   //
-  // LinkedIn renders invitation UI inside #interop-outlet's shadow root.
-  // Do not use shadowRoot.textContent directly because the outlet may
-  // contain CSS or other non-modal content even when no modal is open.
+  // LinkedIn currently renders invitation UI
+  // inside #interop-outlet's open shadow root.
+  // Looking for a centered visible element avoids
+  // treating unrelated shadow-root content as a modal.
   const interopRoot =
     document.querySelector('#interop-outlet')?.shadowRoot ?? null;
 
@@ -201,7 +213,9 @@ LCA.resolveModalState = function resolveModalState() {
   if (unknownModal) {
     return {
       type: 'UNKNOWN',
+
       text: unknownModal.textContent?.trim() ?? '',
+
       dom: unknownModal.outerHTML,
     };
   }
@@ -209,23 +223,4 @@ LCA.resolveModalState = function resolveModalState() {
   return {
     type: 'NONE',
   };
-};
-
-LCA.observeModals = function observeModals() {
-  const observer = new MutationObserver(() => {
-    const modalState = LCA.resolveModalState();
-
-    if (modalState.type === 'NONE') {
-      return;
-    }
-
-    console.log('[LCA] MODAL STATE:', modalState);
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
-
-  console.log('[LCA] MODAL OBSERVER STARTED');
 };

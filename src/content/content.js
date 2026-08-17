@@ -1,18 +1,17 @@
 console.log('[LCA] CONTENT SCRIPT LOADED');
 
-LCA.observeModals();
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'START') {
-    LCA.handleStart();
+    LCA.handleStart().catch((error) => {
+      console.error('[LCA] START HANDLER FAILED:', error);
+    });
+
     return;
   }
 
   if (message.type === 'RESOLVE_TARGET_POSITION') {
     LCA.resolveTargetPosition(message.target)
-      .then((position) => {
-        sendResponse(position);
-      })
+      .then(sendResponse)
       .catch((error) => {
         console.error('[LCA] FAILED TO RESOLVE TARGET POSITION:', error);
 
@@ -23,16 +22,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'GET_MODAL_STATE') {
-    const modalState = LCA.resolveModalState();
+    sendResponse(LCA.resolveModalState());
 
-    console.log('[LCA] MODAL STATE REQUESTED:', modalState);
-
-    sendResponse(modalState);
-  }
-  if (message.type === 'RESOLVE_OVERFLOW_CONNECT_POSITION') {
-    sendResponse(LCA.resolveOverflowConnectPosition());
     return;
   }
+
+  if (message.type === 'RESOLVE_OVERFLOW_CONNECT_POSITION') {
+    sendResponse(LCA.resolveOverflowConnectPosition());
+
+    return;
+  }
+
   if (message.type === 'RESOLVE_NEXT_PAGE_POSITION') {
     LCA.resolveNextPagePosition()
       .then(sendResponse)
@@ -48,7 +48,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 LCA.handleStart = async function handleStart() {
   console.log('[LCA] START RECEIVED');
-  console.log('[LCA] URL:', window.location.href);
 
   const isPeopleSearch = window.location.pathname === '/search/results/people/';
 
@@ -67,8 +66,6 @@ LCA.handleStart = async function handleStart() {
 
   const targets = await LCA.collectTargetsWithScroll();
 
-  console.log('[LCA] FINAL TARGETS:', targets);
-
   const currentPage = LCA.getCurrentPageNumber();
 
   const nextButton = LCA.getNextPageButton();
@@ -76,12 +73,12 @@ LCA.handleStart = async function handleStart() {
   const nextPage = LCA.createNextPageTarget(nextButton, currentPage);
 
   console.log('[LCA] PAGE DATA:', {
-    targets,
+    targetsCount: targets.length,
     currentPage,
-    nextPage,
+    hasNextPage: Boolean(nextPage),
   });
 
-  chrome.runtime.sendMessage({
+  await chrome.runtime.sendMessage({
     type: 'PAGE_DATA',
     payload: {
       targets,
@@ -98,9 +95,6 @@ LCA.handleStart = async function handleStart() {
 chrome.runtime
   .sendMessage({
     type: 'CONTENT_READY',
-    payload: {
-      url: window.location.href,
-    },
   })
   .catch((error) => {
     console.log('[LCA] CONTENT_READY FAILED:', error.message);

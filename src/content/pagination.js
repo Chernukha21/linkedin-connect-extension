@@ -1,17 +1,31 @@
 globalThis.LCA = globalThis.LCA ?? {};
 
+LCA.pageChangeObserver = LCA.pageChangeObserver ?? null;
+
 LCA.getCurrentPageNumber = function getCurrentPageNumber() {
   const currentPageButton = document.querySelector(
-    'button[aria-current="true"][aria-label^="Page "]'
+    'button[aria-current="true"]'
   );
 
   if (!currentPageButton) {
     return null;
   }
 
-  const label = currentPageButton.getAttribute('aria-label');
+  const text = currentPageButton.textContent?.trim() ?? '';
 
-  return Number(label.replace('Page ', ''));
+  const label = currentPageButton.getAttribute('aria-label') ?? '';
+
+  // Prefer the visible numeric page value.
+  // Fall back to aria-label if necessary.
+  const match = text.match(/\d+/) ?? label.match(/\d+/);
+
+  if (!match) {
+    return null;
+  }
+
+  const page = Number(match[0]);
+
+  return Number.isFinite(page) ? page : null;
 };
 
 LCA.getNextPageButton = function getNextPageButton() {
@@ -28,7 +42,9 @@ LCA.getNextPageButton = function getNextPageButton() {
       const isNext =
         testId.startsWith('pagination-controls-next-button') || text === 'Next';
 
-      return isNext && !button.disabled && rect.width > 0 && rect.height > 0;
+      const isVisible = rect.width > 0 && rect.height > 0;
+
+      return isNext && !button.disabled && isVisible;
     }) ?? null
   );
 };
@@ -51,21 +67,45 @@ LCA.createNextPageTarget = function createNextPageTarget(
   };
 };
 
+LCA.disconnectPageChangeObserver = function disconnectPageChangeObserver() {
+  if (!LCA.pageChangeObserver) {
+    return;
+  }
+
+  LCA.pageChangeObserver.disconnect();
+  LCA.pageChangeObserver = null;
+};
+
 LCA.waitForPageChange = function waitForPageChange(previousPage) {
+  // Only one page-change observer may exist
+  // at a time. This prevents Pause → Resume
+  // from creating duplicate observers.
+  LCA.disconnectPageChangeObserver();
+
   const observer = new MutationObserver(() => {
     const currentPage = LCA.getCurrentPageNumber();
 
-    if (currentPage && currentPage !== previousPage) {
-      console.log('[LCA] PAGE CHANGED:', {
-        from: previousPage,
-        to: currentPage,
-      });
-
-      observer.disconnect();
-
-      LCA.handleStart();
+    if (!currentPage || currentPage === previousPage) {
+      return;
     }
+
+    console.log('[LCA] PAGE CHANGED:', {
+      from: previousPage,
+      to: currentPage,
+    });
+
+    observer.disconnect();
+
+    if (LCA.pageChangeObserver === observer) {
+      LCA.pageChangeObserver = null;
+    }
+
+    LCA.handleStart().catch((error) => {
+      console.error('[LCA] PAGE CHANGE HANDLER FAILED:', error);
+    });
   });
+
+  LCA.pageChangeObserver = observer;
 
   observer.observe(document.body, {
     childList: true,
@@ -82,6 +122,7 @@ LCA.resolveNextPagePosition = async function resolveNextPagePosition(
 
   if (!nextButton) {
     console.log('[LCA] NEXT PAGE BUTTON NOT FOUND');
+
     return null;
   }
 
@@ -96,16 +137,6 @@ LCA.resolveNextPagePosition = async function resolveNextPagePosition(
       rect.top < window.innerHeight &&
       rect.left < window.innerWidth;
 
-    console.log('[LCA] NEXT PAGE RECT:', {
-      testId: button.getAttribute('data-testid'),
-      viewportHeight: window.innerHeight,
-      top: rect.top,
-      bottom: rect.bottom,
-      width: rect.width,
-      height: rect.height,
-      isVisible,
-    });
-
     if (!isVisible) {
       return null;
     }
@@ -116,16 +147,14 @@ LCA.resolveNextPagePosition = async function resolveNextPagePosition(
     };
   };
 
-  // Most of the time pagination is already visible after target collection.
+  // Target collection usually leaves pagination
+  // visible, so try the current position first.
   const currentPosition = getVisiblePosition(nextButton);
 
   if (currentPosition) {
-    console.log('[LCA] NEXT PAGE POSITION RESOLVED:', currentPosition);
-
     return currentPosition;
   }
 
-  // Scroll only if the button is actually outside the viewport.
   nextButton.scrollIntoView({
     behavior: 'auto',
     block: 'center',
@@ -140,14 +169,13 @@ LCA.resolveNextPagePosition = async function resolveNextPagePosition(
 
     if (!nextButton) {
       console.log('[LCA] NEXT PAGE BUTTON DISAPPEARED');
+
       return null;
     }
 
     const position = getVisiblePosition(nextButton);
 
     if (position) {
-      console.log('[LCA] NEXT PAGE POSITION RESOLVED:', position);
-
       return position;
     }
   }

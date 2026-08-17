@@ -1,5 +1,27 @@
 globalThis.LCA = globalThis.LCA ?? {};
 
+LCA.getActionElements = function getActionElements() {
+  return [
+    ...document.querySelectorAll(`
+      a[aria-label],
+      button[aria-label],
+      a[href*="/messaging/compose/"]
+    `),
+  ];
+};
+
+LCA.getProfileHref = function getProfileHref(element) {
+  const card = element.closest('li');
+
+  if (!card) {
+    return null;
+  }
+
+  const profileLink = card.querySelector('a[href*="/in/"]');
+
+  return profileLink?.getAttribute('href') ?? null;
+};
+
 LCA.createTarget = function createTarget(element) {
   const type = LCA.resolveAction(element);
 
@@ -11,37 +33,54 @@ LCA.createTarget = function createTarget(element) {
 
   const ariaLabel = element.getAttribute('aria-label')?.trim() ?? '';
 
+  const profileHref = LCA.getProfileHref(element);
+
   return {
     type,
+
     name: LCA.extractName(type, ariaLabel),
+
     label: ariaLabel,
+
     href: element.getAttribute('href'),
+
+    profileHref,
+
     x: rect.left + rect.width / 2,
+
     y: rect.top + rect.height / 2,
   };
 };
 
 LCA.collectVisibleTargets = function collectVisibleTargets() {
-  const actionElements = [
-    ...document.querySelectorAll(`
-      a[aria-label],
-      button[aria-label],
-      a[href*="/messaging/compose/"]
-    `),
-  ];
-
-  return actionElements.map(LCA.createTarget).filter(Boolean);
+  return LCA.getActionElements().map(LCA.createTarget).filter(Boolean);
 };
 
 LCA.getTargetKey = function getTargetKey(target) {
-  return [target.type, target.href ?? '', target.label ?? ''].join('|');
+  return [
+    target.type,
+    target.profileHref ?? '',
+    target.href ?? '',
+    target.label ?? '',
+  ].join('|');
 };
 
 LCA.collectTargetsWithScroll = async function collectTargetsWithScroll() {
   const collected = new Map();
 
   let unchangedPasses = 0;
+
   const maxUnchangedPasses = 3;
+
+  // Always scan the page from the beginning.
+  // This keeps target order stable after
+  // reload / pause / resume.
+  window.scrollTo({
+    top: 0,
+    behavior: 'auto',
+  });
+
+  await LCA.sleep(500);
 
   while (unchangedPasses < maxUnchangedPasses) {
     const targets = LCA.collectVisibleTargets();
@@ -61,20 +100,8 @@ LCA.collectTargetsWithScroll = async function collectTargetsWithScroll() {
     console.log('[LCA] COLLECT PASS:', {
       visible: targets.length,
       total: sizeAfter,
+      unchangedPasses,
     });
-
-    console.log('[LCA] BEFORE SCROLL');
-
-    window.scrollBy({
-      top: window.innerHeight * 0.8,
-      behavior: 'smooth',
-    });
-
-    console.log('[LCA] AFTER SCROLL');
-
-    await LCA.sleep(1200);
-
-    console.log('[LCA] AFTER SLEEP');
 
     if (sizeAfter === sizeBefore) {
       unchangedPasses += 1;
@@ -82,35 +109,43 @@ LCA.collectTargetsWithScroll = async function collectTargetsWithScroll() {
       unchangedPasses = 0;
     }
 
+    if (unchangedPasses >= maxUnchangedPasses) {
+      break;
+    }
+
     window.scrollBy({
       top: window.innerHeight * 0.8,
+
       behavior: 'smooth',
     });
 
     await LCA.sleep(1200);
   }
 
+  console.log('[LCA] TARGET COLLECTION COMPLETE:', {
+    total: collected.size,
+  });
+
   return [...collected.values()];
 };
 
 LCA.findTargetElement = function findTargetElement(target) {
-  const actionElements = [
-    ...document.querySelectorAll(`
-      a[aria-label],
-      button[aria-label],
-      a[href*="/messaging/compose/"]
-    `),
-  ];
-
   return (
-    actionElements.find((element) => {
+    LCA.getActionElements().find((element) => {
       const type = LCA.resolveAction(element);
 
       if (type !== target.type) {
         return false;
       }
 
+      const profileHref = LCA.getProfileHref(element);
+
+      if (target.profileHref && profileHref !== target.profileHref) {
+        return false;
+      }
+
       const ariaLabel = element.getAttribute('aria-label')?.trim() ?? '';
+
       const href = element.getAttribute('href') ?? null;
 
       if (target.label && ariaLabel === target.label) {
@@ -145,6 +180,8 @@ LCA.resolveTargetPosition = async function resolveTargetPosition(target) {
 
   await LCA.sleep(500);
 
+  // The list may be virtualized and the original
+  // DOM node may have been replaced during scroll.
   element = LCA.findTargetElement(target);
 
   if (!element) {
@@ -158,43 +195,37 @@ LCA.resolveTargetPosition = async function resolveTargetPosition(target) {
 
   const rect = element.getBoundingClientRect();
 
-  if (
-    rect.width <= 0 ||
-    rect.height <= 0 ||
-    rect.bottom < 0 ||
-    rect.top > window.innerHeight
-  ) {
+  const isVisible =
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.top < window.innerHeight &&
+    rect.left < window.innerWidth;
+
+  if (!isVisible) {
     console.log('[LCA] TARGET IS OUTSIDE VIEWPORT:', {
       name: target.name,
-      rect: {
-        top: rect.top,
-        bottom: rect.bottom,
-        width: rect.width,
-        height: rect.height,
-      },
+      type: target.type,
     });
 
     return null;
   }
 
-  const position = {
+  return {
     x: rect.left + rect.width / 2,
+
     y: rect.top + rect.height / 2,
   };
-
-  console.log('[LCA] TARGET POSITION RESOLVED:', {
-    name: target.name,
-    ...position,
-  });
-
-  return position;
 };
 
 LCA.findOverflowConnectElement = function findOverflowConnectElement() {
   const candidates = [
-    ...document.querySelectorAll(
-      '[role="menuitem"], [role="menu"] button, [role="menu"] a'
-    ),
+    ...document.querySelectorAll(`
+        [role="menuitem"],
+        [role="menu"] button,
+        [role="menu"] a
+      `),
   ];
 
   return (
@@ -205,13 +236,15 @@ LCA.findOverflowConnectElement = function findOverflowConnectElement() {
         return false;
       }
 
-      const text = element.textContent?.trim() ?? '';
-      const ariaLabel = element.getAttribute('aria-label')?.trim() ?? '';
+      const text = element.textContent?.trim().toLowerCase() ?? '';
+
+      const ariaLabel =
+        element.getAttribute('aria-label')?.trim().toLowerCase() ?? '';
 
       return (
-        text === 'Connect' ||
-        ariaLabel === 'Connect' ||
-        ariaLabel.toLowerCase().includes('connect')
+        text === 'connect' ||
+        ariaLabel === 'connect' ||
+        ariaLabel.startsWith('invite ')
       );
     }) ?? null
   );
@@ -222,17 +255,15 @@ LCA.resolveOverflowConnectPosition = function resolveOverflowConnectPosition() {
 
   if (!element) {
     console.log('[LCA] OVERFLOW CONNECT NOT FOUND');
+
     return null;
   }
 
   const rect = element.getBoundingClientRect();
 
-  const position = {
+  return {
     x: rect.left + rect.width / 2,
+
     y: rect.top + rect.height / 2,
   };
-
-  console.log('[LCA] OVERFLOW CONNECT POSITION:', position);
-
-  return position;
 };

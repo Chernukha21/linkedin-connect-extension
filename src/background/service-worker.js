@@ -1,17 +1,13 @@
 import { getState, setState } from './state.js';
+
 import { startAutomation, stopAutomation } from './automation.js';
+
 import { handlePageData } from './page.js';
-import {
-  handleModalState,
-  processNextTarget,
-  resumeNextPage,
-} from './queue.js';
-import { getInterTargetDelay } from './timing.js';
-import {
-  getRateLimitStatus,
-  canSendInvitation,
-  recordInvitation,
-} from './rate-limit.js';
+
+import { processNextTarget, resumeNextPage } from './queue.js';
+
+import { getRateLimitStatus } from './rate-limit.js';
+
 import {
   RECOVERY_ALARM,
   scheduleRecovery,
@@ -19,23 +15,8 @@ import {
   getPendingRecovery,
   ensureRecoveryAlarm,
 } from './recovery.js';
-import { addLogEvent, getLogEvents, clearLogEvents } from './log.js';
 
-globalThis.LCA_TEST = {
-  handleModalState,
-  processNextTarget,
-  getRateLimitStatus,
-  canSendInvitation,
-  recordInvitation,
-  getInterTargetDelay,
-  scheduleRecovery,
-  clearRecovery,
-  getPendingRecovery,
-  ensureRecoveryAlarm,
-  startAutomation,
-  stopAutomation,
-  addLogEvent,
-};
+import { getLogEvents, clearLogEvents } from './log.js';
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('[LCA] BROWSER STARTUP');
@@ -75,6 +56,7 @@ async function handleContentReady(sender) {
 
   if (state.status !== 'running' && state.status !== 'waiting_next_page') {
     console.log('[LCA] NO ACTIVE RUN TO RESUME');
+
     return;
   }
 
@@ -88,8 +70,8 @@ async function handleContentReady(sender) {
     return;
   }
 
-  // If a delayed action is already persisted,
-  // normal sleep/alarm recovery owns continuation.
+  // A persisted delayed action already owns
+  // continuation through the recovery watchdog.
   if (state.pendingAction) {
     console.log('[LCA] RECOVERY ALREADY PENDING:', {
       type: state.pendingAction.type,
@@ -102,6 +84,7 @@ async function handleContentReady(sender) {
     console.log('[LCA] REARMING NEXT PAGE RECOVERY');
 
     await scheduleRecovery('NEXT_PAGE', 0);
+
     return;
   }
 
@@ -132,6 +115,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.type === 'INVALID_PAGE') {
+    getState()
+      .then(async (state) => {
+        await setState({
+          ...state,
+          status: 'stopped',
+        });
+
+        console.warn('[LCA] AUTOMATION STOPPED: invalid page', {
+          url: message.payload?.url,
+        });
+      })
+      .catch((error) => {
+        console.error('[LCA] INVALID PAGE HANDLER FAILED:', error);
+      });
+
+    return;
+  }
+
   if (message.type === 'START_AUTOMATION') {
     startAutomation(message.tabId).catch((error) => {
       console.error('[LCA] START AUTOMATION FAILED:', error);
@@ -141,11 +143,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'STOP_AUTOMATION') {
-    console.warn('[LCA] STOP REQUEST RECEIVED:', {
-      senderUrl: sender.url,
-      tabId: sender.tab?.id ?? null,
-      time: new Date().toISOString(),
-    });
+    console.log('[LCA] STOP REQUEST RECEIVED');
 
     stopAutomation().catch((error) => {
       console.error('[LCA] STOP AUTOMATION FAILED:', error);
@@ -159,6 +157,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(sendResponse)
       .catch((error) => {
         console.error('[LCA] GET STATE FAILED:', error);
+
         sendResponse(null);
       });
 
@@ -170,16 +169,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (!tabId) {
       console.error('[LCA] Page sender tab not found');
+
       return;
     }
 
     handlePageData(tabId, message.payload).catch((error) => {
       console.error('[LCA] HANDLE PAGE DATA FAILED:', error);
     });
+
+    return;
   }
+
   if (message.type === 'GET_UI_STATE') {
     (async () => {
       const state = await getState();
+
       const events = await getLogEvents();
 
       sendResponse({
@@ -199,6 +203,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SET_RATE_LIMITS') {
     (async () => {
       const daily = Number(message.daily);
+
       const weekly = Number(message.weekly);
 
       if (
@@ -254,6 +259,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     return true;
   }
+
   if (message.type === 'CLEAR_LOG') {
     clearLogEvents()
       .then(() => {
@@ -278,63 +284,73 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     return;
   }
 
-  console.log('[LCA] RECOVERY ALARM FIRED:', {
-    name: alarm.name,
-    scheduledTime: alarm.scheduledTime,
-  });
+  try {
+    console.log('[LCA] RECOVERY ALARM FIRED:', {
+      name: alarm.name,
+      scheduledTime: alarm.scheduledTime,
+    });
 
-  const pendingAction = await getPendingRecovery();
+    const pendingAction = await getPendingRecovery();
 
-  if (!pendingAction) {
-    console.log('[LCA] NO PENDING RECOVERY ACTION');
-    return;
-  }
-
-  console.log('[LCA] PENDING RECOVERY ACTION:', pendingAction);
-
-  // Consume recovery before resuming.
-  // This prevents the same action from being replayed twice.
-  await clearRecovery();
-
-  if (pendingAction.type === 'NEXT_TARGET') {
-    const state = await getState();
-
-    if (state.status !== 'running') {
-      console.log('[LCA] NEXT TARGET RECOVERY CANCELLED:', {
-        status: state.status,
-      });
+    if (!pendingAction) {
+      console.log('[LCA] NO PENDING RECOVERY ACTION');
 
       return;
     }
 
-    console.log('[LCA] RESUMING NEXT TARGET');
+    console.log('[LCA] PENDING RECOVERY ACTION:', pendingAction);
 
-    await processNextTarget();
-    return;
-  }
+    // Consume the persisted action before
+    // resuming it so it cannot be replayed twice.
+    await clearRecovery();
 
-  if (pendingAction.type === 'NEXT_PAGE') {
-    const state = await getState();
+    if (pendingAction.type === 'NEXT_TARGET') {
+      const state = await getState();
 
-    if (state.status !== 'waiting_next_page') {
-      console.log('[LCA] NEXT PAGE RECOVERY CANCELLED:', {
-        status: state.status,
-      });
+      if (state.status !== 'running') {
+        console.log('[LCA] NEXT TARGET RECOVERY CANCELLED:', {
+          status: state.status,
+        });
+
+        return;
+      }
+
+      console.log('[LCA] RESUMING NEXT TARGET');
+
+      await processNextTarget();
 
       return;
     }
 
-    console.log('[LCA] RESUMING NEXT PAGE');
+    if (pendingAction.type === 'NEXT_PAGE') {
+      const state = await getState();
 
-    await resumeNextPage();
-    return;
+      if (state.status !== 'waiting_next_page') {
+        console.log('[LCA] NEXT PAGE RECOVERY CANCELLED:', {
+          status: state.status,
+        });
+
+        return;
+      }
+
+      console.log('[LCA] RESUMING NEXT PAGE');
+
+      await resumeNextPage();
+
+      return;
+    }
+
+    console.error('[LCA] UNKNOWN RECOVERY ACTION:', {
+      type: pendingAction.type,
+    });
+  } catch (error) {
+    console.error('[LCA] RECOVERY ALARM HANDLER FAILED:', error);
   }
-
-  console.error('[LCA] UNKNOWN RECOVERY ACTION:', {
-    type: pendingAction.type,
-  });
 });
 
+// Service workers can be restarted independently
+// of browser startup. Reconcile persisted recovery
+// state every time this worker is evaluated.
 ensureRecoveryAlarm().catch((error) => {
   console.error('[LCA] RECOVERY RECONCILIATION FAILED:', error);
 });
