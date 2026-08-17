@@ -53,6 +53,8 @@ The extension will appear in the Chrome toolbar.
 ---
 
 ## Usage
+Link with livedemo and explanation https://drive.google.com/drive/folders/1RZIEpm4g47MJ3S0sDSDAaZpP0w66QEyT?usp=sharing
+
 
 Open a LinkedIn People Search page, for example:
 
