@@ -184,7 +184,7 @@ README.md
 The main automation state is persisted through:
 
 ```js
-chrome.storage.local
+chrome.storage.local;
 ```
 
 The state contains information such as:
@@ -534,13 +534,13 @@ Long-running automation therefore cannot depend on JavaScript timers alone.
 The extension persists delayed actions as:
 
 ```js
-pendingAction
+pendingAction;
 ```
 
 and creates a matching:
 
 ```js
-chrome.alarms
+chrome.alarms;
 ```
 
 watchdog.
@@ -701,9 +701,7 @@ element.click();
 or manually dispatching a mouse event:
 
 ```js
-element.dispatchEvent(
-  new MouseEvent('click')
-);
+element.dispatchEvent(new MouseEvent('click'));
 ```
 
 produces a synthetic event.
@@ -711,7 +709,7 @@ produces a synthetic event.
 Such events have:
 
 ```js
-event.isTrusted === false
+event.isTrusted === false;
 ```
 
 This makes direct DOM interaction distinguishable from input that passes through the browser's input pipeline.
@@ -727,7 +725,7 @@ I considered three possible approaches.
 This is the simplest implementation, but it produces synthetic events with:
 
 ```js
-event.isTrusted === false
+event.isTrusted === false;
 ```
 
 For that reason it was not suitable for this task.
@@ -739,13 +737,13 @@ For that reason it was not suitable for this task.
 A Manifest V3 extension can attach to a tab using:
 
 ```js
-chrome.debugger.attach()
+chrome.debugger.attach();
 ```
 
 and send Chrome DevTools Protocol commands with:
 
 ```js
-chrome.debugger.sendCommand()
+chrome.debugger.sendCommand();
 ```
 
 Mouse input can then be dispatched using the CDP:
@@ -759,7 +757,7 @@ command.
 The content script is responsible for locating the target DOM element and obtaining its coordinates using:
 
 ```js
-getBoundingClientRect()
+getBoundingClientRect();
 ```
 
 The coordinates are sent to the extension service worker, which owns the `chrome.debugger` interaction.
@@ -775,7 +773,7 @@ mouseMoved
 This produced a normal click event on the test target with:
 
 ```js
-event.isTrusted === true
+event.isTrusted === true;
 ```
 
 I verified this explicitly with a click listener on a controlled test page.
@@ -860,7 +858,7 @@ The goal is to use the normal browser input path required by the assignment whil
 Using:
 
 ```js
-chrome.debugger
+chrome.debugger;
 ```
 
 causes Chrome to display a visible notification indicating that the extension is debugging the browser.
@@ -923,7 +921,7 @@ The implementation intentionally avoids generated CSS class names where practica
 The trusted-input proof of concept verifies that events generated through CDP reach the page with:
 
 ```js
-event.isTrusted === true
+event.isTrusted === true;
 ```
 
 It does not imply that the complete automation cannot be detected through behavioral, client-side or server-side signals.
@@ -937,7 +935,7 @@ Trusted input is treated as one engineering requirement rather than as a complet
 Chrome displays a visible debugging notification while the extension is attached through:
 
 ```js
-chrome.debugger
+chrome.debugger;
 ```
 
 This is expected behavior.
@@ -957,7 +955,7 @@ If the account is subject to a LinkedIn search restriction or search-result limi
 Automation state is stored locally through:
 
 ```js
-chrome.storage.local
+chrome.storage.local;
 ```
 
 The extension does not require an external backend for its current implementation.
@@ -978,22 +976,17 @@ recent event log
 The extension currently requests:
 
 ```json
-[
-  "activeTab",
-  "debugger",
-  "storage",
-  "alarms"
-]
+["activeTab", "debugger", "storage", "alarms"]
 ```
 
 Their purposes are:
 
-| Permission | Purpose |
-|---|---|
-| `activeTab` | access to the currently selected LinkedIn tab |
-| `debugger` | trusted browser input through CDP |
-| `storage` | persistent automation state, counters and limits |
-| `alarms` | recovery of delayed actions after MV3 worker suspension |
+| Permission  | Purpose                                                 |
+| ----------- | ------------------------------------------------------- |
+| `activeTab` | access to the currently selected LinkedIn tab           |
+| `debugger`  | trusted browser input through CDP                       |
+| `storage`   | persistent automation state, counters and limits        |
+| `alarms`    | recovery of delayed actions after MV3 worker suspension |
 
 Content scripts are limited to:
 
@@ -1018,7 +1011,7 @@ A final demonstration should show:
 7. explicit proof that the resulting event has:
 
 ```js
-event.isTrusted === true
+event.isTrusted === true;
 ```
 
 8. invitation modal handling;

@@ -1,15 +1,21 @@
 {
   "name": "linkedin-connect-extension",
   "version": "1.0.0",
-  "description": "Calling a DOM element directly:",
-  "main": "src/content/content.js",
+  "description": "Chrome MV3 extension for LinkedIn connection automation",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "format": "prettier --write \"src/**/*.{js,html,css}\" \"*.{json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{js,html,css}\" \"*.{json,md}\"",
+    "test": "node --test",
+    "build": "node scripts/build.mjs"
   },
-  "keywords": [],
+  "keywords": [
+    "chrome-extension",
+    "manifest-v3",
+    "linkedin"
+  ],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "devDependencies": {
     "@types/chrome": "^0.2.6",
     "prettier": "^3.9.6"

@@ -1,172 +1,119 @@
 <!doctype html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <title>LinkedIn Connect</title>
 
     <link rel="stylesheet" href="popup.css" />
-</head>
+  </head>
 
-<body>
-<main class="popup">
-    <header class="header">
+  <body>
+    <main class="popup">
+      <header class="header">
         <div>
-            <h1>LinkedIn Connect</h1>
-            <p class="subtitle">Connection automation</p>
+          <h1>LinkedIn Connect</h1>
+          <p class="subtitle">Connection automation</p>
         </div>
 
-        <span
-                id="status"
-                class="status"
-                data-status="idle"
-        >
-        idle
-      </span>
-    </header>
+        <span id="status" class="status" data-status="idle"> idle </span>
+      </header>
 
-    <section class="section">
-        <div class="section-title">
-            Progress
-        </div>
+      <section class="section">
+        <div class="section-title">Progress</div>
 
         <div class="progress-row">
-            <div>
-                <span class="label">Page</span>
-                <strong id="currentPage">1</strong>
-            </div>
+          <div>
+            <span class="label">Page</span>
+            <strong id="currentPage">1</strong>
+          </div>
 
-            <div>
-                <span class="label">Targets</span>
-                <strong id="progress">0 / 0</strong>
-            </div>
+          <div>
+            <span class="label">Targets</span>
+            <strong id="progress">0 / 0</strong>
+          </div>
         </div>
 
         <div class="progress-track">
-            <div
-                    id="progressBar"
-                    class="progress-bar"
-            ></div>
+          <div id="progressBar" class="progress-bar"></div>
         </div>
-    </section>
+      </section>
 
-    <section class="section">
-        <div class="section-title">
-            Results
-        </div>
+      <section class="section">
+        <div class="section-title">Results</div>
 
         <div class="stats">
-            <div class="stat">
-                <span class="stat-value" id="sentCount">0</span>
-                <span class="stat-label">Sent</span>
-            </div>
+          <div class="stat">
+            <span class="stat-value" id="sentCount">0</span>
+            <span class="stat-label">Sent</span>
+          </div>
 
-            <div class="stat">
-                <span class="stat-value" id="skippedCount">0</span>
-                <span class="stat-label">Skipped</span>
-            </div>
+          <div class="stat">
+            <span class="stat-value" id="skippedCount">0</span>
+            <span class="stat-label">Skipped</span>
+          </div>
 
-            <div class="stat">
-                <span class="stat-value" id="failedCount">0</span>
-                <span class="stat-label">Failed</span>
-            </div>
+          <div class="stat">
+            <span class="stat-value" id="failedCount">0</span>
+            <span class="stat-label">Failed</span>
+          </div>
         </div>
-    </section>
+      </section>
 
-    <section class="section">
-        <div class="section-title">
-            Rate limits
-        </div>
+      <section class="section">
+        <div class="section-title">Rate limits</div>
 
         <div class="limits-status">
-            <div class="limit-row">
-                <span>Daily remaining</span>
-                <strong id="dailyRemaining">—</strong>
-            </div>
+          <div class="limit-row">
+            <span>Daily remaining</span>
+            <strong id="dailyRemaining">—</strong>
+          </div>
 
-            <div class="limit-row">
-                <span>Weekly remaining</span>
-                <strong id="weeklyRemaining">—</strong>
-            </div>
+          <div class="limit-row">
+            <span>Weekly remaining</span>
+            <strong id="weeklyRemaining">—</strong>
+          </div>
         </div>
 
         <div class="limit-inputs">
-            <label>
-                <span>Daily limit</span>
+          <label>
+            <span>Daily limit</span>
 
-                <input
-                        id="dailyLimit"
-                        type="number"
-                        min="1"
-                        step="1"
-                />
-            </label>
+            <input id="dailyLimit" type="number" min="1" step="1" />
+          </label>
 
-            <label>
-                <span>Weekly limit</span>
+          <label>
+            <span>Weekly limit</span>
 
-                <input
-                        id="weeklyLimit"
-                        type="number"
-                        min="1"
-                        step="1"
-                />
-            </label>
+            <input id="weeklyLimit" type="number" min="1" step="1" />
+          </label>
         </div>
 
-        <button
-                id="saveLimitsButton"
-                class="button secondary full"
-        >
-            Save limits
+        <button id="saveLimitsButton" class="button secondary full">
+          Save limits
         </button>
 
-        <div
-                id="settingsMessage"
-                class="message"
-        ></div>
-    </section>
-    <section class="section">
+        <div id="settingsMessage" class="message"></div>
+      </section>
+      <section class="section">
         <div class="events-header">
-            <div class="section-title events-title">
-                Recent events
-            </div>
+          <div class="section-title events-title">Recent events</div>
 
-            <button
-                    id="clearLogButton"
-                    class="text-button"
-            >
-                Clear
-            </button>
+          <button id="clearLogButton" class="text-button">Clear</button>
         </div>
 
-        <div
-                id="eventLog"
-                class="event-log"
-        >
-            <div class="empty-log">
-                No events yet
-            </div>
+        <div id="eventLog" class="event-log">
+          <div class="empty-log">No events yet</div>
         </div>
-    </section>
-    <section class="controls">
-        <button
-                id="startButton"
-                class="button primary"
-        >
-            Start
-        </button>
+      </section>
+      <section class="controls">
+        <button id="startButton" class="button primary">Start</button>
 
-        <button
-                id="stopButton"
-                class="button danger"
-        >
-            Stop
-        </button>
-    </section>
-</main>
+        <button id="stopButton" class="button danger">Stop</button>
+      </section>
+    </main>
 
-<script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>
