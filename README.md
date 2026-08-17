@@ -8,6 +8,14 @@ The extension discovers actionable profile cards, processes them sequentially, h
 
 ---
 
+## Demo
+
+[Live demo and explanation](https://drive.google.com/drive/folders/1RZIEpm4g47MJ3S0sDSDAaZpP0w66QEyT?usp=sharing)
+
+The demo shows the extension working in live mode, including trusted CDP clicks, successful connection invitations, popup counters, Pause/Resume behavior, skipped targets and local rate limiting.
+
+---
+
 ## Features
 
 - Chrome Manifest V3 architecture
@@ -32,15 +40,11 @@ The extension discovers actionable profile cards, processes them sequentially, h
 
 1. Clone the repository.
 
-```bash
-git clone <repository-url>
-```
+   git clone <repository-url>
 
 2. Open Chrome and navigate to:
 
-```text
-chrome://extensions
-```
+   chrome://extensions
 
 3. Enable **Developer mode**.
 
@@ -53,14 +57,10 @@ The extension will appear in the Chrome toolbar.
 ---
 
 ## Usage
-Link with livedemo and explanation https://drive.google.com/drive/folders/1RZIEpm4g47MJ3S0sDSDAaZpP0w66QEyT?usp=sharing
-
 
 Open a LinkedIn People Search page, for example:
 
-```text
-https://www.linkedin.com/search/results/people/
-```
+    https://www.linkedin.com/search/results/people/
 
 Open the extension popup and configure the desired daily and weekly limits.
 
@@ -76,25 +76,15 @@ The popup displays:
 - remaining weekly allowance;
 - recent automation events.
 
-Use:
-
-```text
-Start
-Pause
-Resume
-```
-
-to control the automation.
+Use **Start**, **Pause** and **Resume** to control the automation.
 
 ---
 
 ## Safety switch
 
-The project currently contains a development safety switch in the queue:
+The project contains a development safety switch in the queue:
 
-```js
-const LIVE_CONNECT_ENABLED = false;
-```
+    const LIVE_CONNECT_ENABLED = false;
 
 When disabled, the extension can discover targets and execute the surrounding automation flow without performing a real Connect click.
 
